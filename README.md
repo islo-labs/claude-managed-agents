@@ -1,8 +1,8 @@
 # Claude Managed Agents on Islo
 
-Self-hosted [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents) control plane that runs agent sessions on **Islo Cloud Hypervisor (CLH) sandboxes** instead of Cloudflare Containers.
+Self-hosted [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents) control plane that runs agent sessions on **Islo Cloud Hypervisor (CLH) sandboxes**.
 
-This repo is **not a fork** of [cloudflare/claude-managed-agents](https://github.com/cloudflare/claude-managed-agents). It implements the same CMA webhook/work protocol and uses Islo's existing sandbox API as the compute backend.
+The service implements the Anthropic CMA webhook and work protocol, and uses Islo's existing sandbox API as the compute backend.
 
 ## Architecture
 

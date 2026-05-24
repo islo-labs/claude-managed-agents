@@ -1,7 +1,7 @@
 {
   "name": "claude-managed-agents",
   "version": "0.1.0",
-  "description": "Self-hosted Claude Managed Agents control plane on Islo (Cloud Hypervisor sandboxes)",
+  "description": "Self-hosted Claude Managed Agents control plane on Islo sandboxes",
   "type": "module",
   "private": true,
   "scripts": {

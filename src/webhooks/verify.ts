@@ -1,7 +1,15 @@
+import { timingSafeEqual } from "node:crypto";
+
 const TOLERANCE_SECONDS = 300;
 
-function base64ToBytes(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+function base64ToBytes(b64: string): Uint8Array | null {
+  const trimmed = b64.trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) return null;
+  try {
+    return Buffer.from(trimmed, "base64");
+  } catch {
+    return null;
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -9,10 +17,9 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 function constantTimeEq(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export async function verifyStandardWebhook(
@@ -28,13 +35,11 @@ export async function verifyStandardWebhook(
 
   let keyBytes: Uint8Array;
   if (secret.startsWith("whsec_")) {
-    keyBytes = base64ToBytes(secret.slice("whsec_".length));
+    const decoded = base64ToBytes(secret.slice("whsec_".length));
+    if (!decoded) return false;
+    keyBytes = decoded;
   } else {
-    try {
-      keyBytes = base64ToBytes(secret);
-    } catch {
-      keyBytes = new TextEncoder().encode(secret);
-    }
+    keyBytes = new TextEncoder().encode(secret);
   }
 
   const key = await crypto.subtle.importKey(
@@ -55,7 +60,7 @@ export async function verifyStandardWebhook(
   const mac = await crypto.subtle.sign("HMAC", key, signedInput);
   const expected = bytesToBase64(new Uint8Array(mac));
 
-  for (const sig of signatureHeader.split(" ")) {
+  for (const sig of signatureHeader.trim().split(/\s+/)) {
     const [ver, mac64] = sig.split(",", 2);
     if (ver !== "v1" || !mac64) continue;
     if (constantTimeEq(mac64, expected)) return true;
@@ -74,5 +79,9 @@ export interface WebhookEvent {
 }
 
 export function parseWebhookEvent(rawBody: ArrayBuffer): WebhookEvent {
-  return JSON.parse(new TextDecoder().decode(rawBody)) as WebhookEvent;
+  const parsed = JSON.parse(new TextDecoder().decode(rawBody));
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("webhook payload must be an object");
+  }
+  return parsed as WebhookEvent;
 }

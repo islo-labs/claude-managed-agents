@@ -107,6 +107,7 @@ export class SessionCoordinator {
       );
     }
 
+    this.store.upsertSession(opts.sessionId, "session.status_run_started");
     this.store.bindSandbox(opts.sessionId, resolvedSandboxName, sandboxId, opts.workId);
     this.startRunner(opts, resolvedSandboxName);
     return true;
@@ -163,7 +164,7 @@ export class SessionCoordinator {
   async snapshotSession(sessionId: string): Promise<void> {
     const row = this.store.getSession(sessionId);
     if (!row?.sandbox_id) {
-      console.log(`[snapshot] skipped session=${sessionId} — no sandbox bound`);
+      console.log(`[snapshot] skipped session=${sessionId} - no sandbox bound`);
       return;
     }
     const snapshotName = `cma-${sessionId.slice(0, 32)}`;

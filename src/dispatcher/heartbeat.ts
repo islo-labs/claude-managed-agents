@@ -30,14 +30,14 @@ export async function runHeartbeatLoop(opts: HeartbeatLoopOpts): Promise<void> {
       lastHeartbeat = response.last_heartbeat;
       if (response.state === "stopping" || response.state === "stopped") {
         console.log(
-          `${opts.logPrefix} heartbeat state=${response.state} work=${opts.workId} — aborting runner`,
+          `${opts.logPrefix} heartbeat state=${response.state} work=${opts.workId} - aborting runner`,
         );
         opts.abort();
         return;
       }
-      if (!response.lease_extended) {
+      if (response.lease_extended === false) {
         console.warn(
-          `${opts.logPrefix} heartbeat lease not extended work=${opts.workId} — aborting runner`,
+          `${opts.logPrefix} heartbeat lease not extended work=${opts.workId} - aborting runner`,
         );
         opts.abort();
         return;
@@ -47,7 +47,7 @@ export async function runHeartbeatLoop(opts: HeartbeatLoopOpts): Promise<void> {
       const status = (error as { status?: number })?.status;
       if (typeof status === "number" && status >= 400 && status < 500) {
         console.warn(
-          `${opts.logPrefix} heartbeat ${status} work=${opts.workId} — aborting runner: ${errStr(error)}`,
+          `${opts.logPrefix} heartbeat ${status} work=${opts.workId} - aborting runner: ${errStr(error)}`,
         );
         opts.abort();
         return;

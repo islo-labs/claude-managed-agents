@@ -16,14 +16,3 @@ export function bearerAnthropicClient(
     baseURL: resolveAnthropicBaseURL(baseURL),
   });
 }
-
-export function apiKeyAnthropicClient(
-  Anthropic: typeof import("@anthropic-ai/sdk").default,
-  apiKey: string,
-  baseURL?: string,
-) {
-  return new Anthropic({
-    apiKey,
-    baseURL: resolveAnthropicBaseURL(baseURL),
-  });
-}

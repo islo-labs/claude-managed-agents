@@ -22,7 +22,19 @@ export async function handleWebhook(
     return c.json({ error: "missing signature" }, 401);
   }
 
+  const contentLength = c.req.header("content-length");
+  if (
+    contentLength &&
+    Number.parseInt(contentLength, 10) > config.WEBHOOK_MAX_BODY_BYTES
+  ) {
+    return c.json({ error: "payload too large" }, 413);
+  }
+
   const rawBody = await c.req.arrayBuffer();
+  if (rawBody.byteLength > config.WEBHOOK_MAX_BODY_BYTES) {
+    return c.json({ error: "payload too large" }, 413);
+  }
+
   const valid = await verifyStandardWebhook(
     signature,
     webhookId,
@@ -50,7 +62,10 @@ export async function handleWebhook(
     `[webhook] id=${eventId} type=${evType} session=${sessionId || "(none)"}`,
   );
 
-  store.recordWebhookEvent(eventId, evType, sessionId || null, event);
+  const isNewEvent = store.recordWebhookEvent(eventId, evType, sessionId || null, event);
+  if (!isNewEvent) {
+    return c.body(null, 204);
+  }
   if (sessionId) {
     store.upsertSession(sessionId, evType);
   }

@@ -153,8 +153,8 @@ export function buildStockTools(
       }
       const root = args.path ? resolvePath(args.path) : WORKDIR;
       const flags = ["-n", "--no-heading"];
-      if (typeof args.type === "string") flags.push("-t", args.type);
-      if (typeof args.glob === "string") flags.push("-g", args.glob);
+      if (typeof args.type === "string") flags.push("-t", shellQuote(args.type));
+      if (typeof args.glob === "string") flags.push("-g", shellQuote(args.glob));
       const rgCmd = `rg ${flags.join(" ")} ${shellQuote(pattern)} ${shellQuote(root)} 2>/dev/null | head -500`;
       let result = await islo.exec(
         sandboxName,

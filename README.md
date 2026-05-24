@@ -105,7 +105,6 @@ Work through the steps in order.
    |---|---|
    | `ENVIRONMENT_ID` | Environment details in the Claude console |
    | `ANTHROPIC_ENVIRONMENT_KEY` | Environment secret key (`sk-ant-oat01-...`) |
-   | `ANTHROPIC_API_KEY` | Anthropic API key (`sk-ant-...`) |
    | `WEBHOOK_SECRET` | Webhook signing secret from the webhooks page |
 
 ### Step 3. Deploy the control plane
@@ -138,7 +137,6 @@ npm run dev
 |---|---|---|
 | `ENVIRONMENT_ID` | yes | Anthropic self-managed environment ID |
 | `ANTHROPIC_ENVIRONMENT_KEY` | yes | Environment key |
-| `ANTHROPIC_API_KEY` | yes | Anthropic API key |
 | `WEBHOOK_SECRET` | yes | Webhook signing secret |
 | `ISLO_API_KEY` | yes | Islo API key |
 | `ISLO_API_BASE_URL` | yes | Islo API URL (e.g. `https://api.islo.dev`) |
@@ -147,6 +145,8 @@ npm run dev
 | `ISLO_SANDBOX_CPUS` | no | vCPUs per sandbox (default: `2`) |
 | `ISLO_SANDBOX_MEMORY_MB` | no | Memory per sandbox (default: `4096`) |
 | `ISLO_SANDBOX_DISK_GB` | no | Disk per sandbox (default: `20`) |
+| `ADMIN_TOKEN` | recommended | Bearer token for `/sessions` admin endpoint |
+| `WEBHOOK_MAX_BODY_BYTES` | no | Maximum accepted webhook body size (default: `1048576`) |
 
 See [`.env.example`](.env.example) for all options.
 
@@ -164,11 +164,11 @@ Start a CMA session from the Anthropic console. You should see:
 
 ### Step 6. Secure for production
 
-The control plane is **not authenticated by default**. Before exposing it publicly:
+Before exposing the control plane publicly:
 
 - Terminate **TLS** at a reverse proxy (nginx, Caddy, a load balancer, etc.)
-- Restrict who can reach the service besides Anthropic's webhook delivery
-- Do not expose internal endpoints (like `/sessions`) without access controls
+- Restrict who can reach the service besides Anthropic's webhook delivery when possible
+- Set `ADMIN_TOKEN` before enabling the `/sessions` admin endpoint
 
 ---
 
@@ -180,7 +180,7 @@ The control plane is **not authenticated by default**. Before exposing it public
 |---|---|---|
 | `GET` | `/health` | Health check |
 | `POST` | `/webhooks` | Anthropic webhook receiver |
-| `GET` | `/sessions` | Session status (restrict in production) |
+| `GET` | `/sessions` | Session status (requires `ADMIN_TOKEN`) |
 
 ### Further reading
 

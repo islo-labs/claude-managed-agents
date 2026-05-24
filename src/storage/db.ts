@@ -141,8 +141,8 @@ export class SessionStore {
     eventType: string,
     sessionId: string | null,
     payload: unknown,
-  ): void {
-    this.db
+  ): boolean {
+    const result = this.db
       .prepare(
         `INSERT OR IGNORE INTO webhook_events (id, event_type, session_id, payload, received_at)
          VALUES (?, ?, ?, ?, ?)`,
@@ -154,6 +154,7 @@ export class SessionStore {
         JSON.stringify(payload),
         new Date().toISOString(),
       );
+    return result.changes === 1;
   }
 
   close(): void {

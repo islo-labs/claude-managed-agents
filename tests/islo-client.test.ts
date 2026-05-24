@@ -8,7 +8,6 @@ describe("IsloClient", () => {
     const client = new IsloClient({
       ENVIRONMENT_ID: "env",
       ANTHROPIC_ENVIRONMENT_KEY: "key",
-      ANTHROPIC_API_KEY: "key",
       WEBHOOK_SECRET: "secret",
       ISLO_API_KEY: "islo",
       ISLO_API_BASE_URL: "https://api.islo.dev",
@@ -18,7 +17,7 @@ describe("IsloClient", () => {
       ISLO_SANDBOX_DISK_GB: 20,
       PORT: 8787,
       DATABASE_PATH: ":memory:",
-      SESSION_IDLE_TTL_MS: 180000,
+      WEBHOOK_MAX_BODY_BYTES: 1048576,
       LOG_LEVEL: "info",
     });
     expect(client.sandboxNameForSession("sess_ABC-123")).toBe("cma-sess-abc-123");

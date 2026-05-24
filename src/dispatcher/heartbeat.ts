@@ -45,6 +45,21 @@ export async function runHeartbeatLoop(opts: HeartbeatLoopOpts): Promise<void> {
     } catch (error) {
       if (opts.signal.aborted) return;
       const status = (error as { status?: number })?.status;
+      if (status === 412) {
+        // Server has a different lastHeartbeat than we expect (e.g. after a restart).
+        // Extract the actual last_heartbeat from the error body and resync.
+        const body = (error as { error?: unknown })?.error;
+        const actualHeartbeat =
+          (body as { error?: { details?: { current_state?: { last_heartbeat?: string } } } })
+            ?.error?.details?.current_state?.last_heartbeat;
+        if (typeof actualHeartbeat === "string") {
+          console.log(
+            `${opts.logPrefix} heartbeat resync work=${opts.workId} last_heartbeat=${actualHeartbeat}`,
+          );
+          lastHeartbeat = actualHeartbeat;
+          continue;
+        }
+      }
       if (typeof status === "number" && status >= 400 && status < 500) {
         console.warn(
           `${opts.logPrefix} heartbeat ${status} work=${opts.workId} - aborting runner: ${errStr(error)}`,

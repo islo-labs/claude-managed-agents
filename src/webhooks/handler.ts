@@ -73,7 +73,9 @@ export async function handleWebhook(
   switch (evType) {
     case "session.status_run_started": {
       try {
-        const spawned = await coordinator.drainWork();
+        const spawned = await coordinator.drainWork(
+          sessionId ? { sessionId } : undefined,
+        );
         return c.json({ status: "ok", spawned });
       } catch (error) {
         console.error(`[webhook] drainWork failed: ${errStr(error)}`);

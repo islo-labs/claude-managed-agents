@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { BetaSelfHostedWork } from "@anthropic-ai/sdk/resources/beta/environments/work";
 import type { Config } from "../config.js";
 import { asManagedAgentsClient } from "../anthropic-client.js";
 import { ANTHROPIC_BETA, bearerAnthropicClient, resolveAnthropicBaseURL } from "../anthropic.js";
@@ -42,7 +43,7 @@ export class SessionCoordinator {
     );
   }
 
-  async drainWork(): Promise<DrainResult[]> {
+  async drainWork(opts?: { sessionId?: string }): Promise<DrainResult[]> {
     const poll = asManagedAgentsClient(this.envClient());
     const spawned: DrainResult[] = [];
 
@@ -53,6 +54,11 @@ export class SessionCoordinator {
       });
       if (!work) break;
       if (work.data.type !== "session") continue;
+
+      await poll.beta.environments.work.ack(work.id, {
+        environment_id: this.config.ENVIRONMENT_ID,
+        betas: [ANTHROPIC_BETA],
+      });
 
       const sessionId = work.data.id;
       console.log(`[work] work=${work.id} session=${sessionId}`);
@@ -67,7 +73,56 @@ export class SessionCoordinator {
       spawned.push({ session_id: sessionId, work_id: work.id, created });
     }
 
+    if (opts?.sessionId && !spawned.some((item) => item.session_id === opts.sessionId)) {
+      const resumed = await this.resumeSessionWork(opts.sessionId);
+      if (resumed) spawned.push(resumed);
+    }
+
     return spawned;
+  }
+
+  private async resumeSessionWork(sessionId: string): Promise<DrainResult | null> {
+    if (this.running.has(sessionId)) {
+      return null;
+    }
+
+    const client = asManagedAgentsClient(this.envClient());
+    let work: BetaSelfHostedWork | undefined;
+
+    for await (const item of await client.beta.environments.work.list(
+      this.config.ENVIRONMENT_ID,
+      { betas: [ANTHROPIC_BETA] },
+    )) {
+      if (item.data.type === "session" && item.data.id === sessionId) {
+        work = item;
+        break;
+      }
+    }
+
+    if (!work || work.data.type !== "session") {
+      console.log(`[work] no resumable work for session=${sessionId}`);
+      return null;
+    }
+
+    if (work.state !== "starting" && work.state !== "active") {
+      console.log(
+        `[work] no resumable work for session=${sessionId} state=${work.state}`,
+      );
+      return null;
+    }
+
+    console.log(
+      `[work] resume work=${work.id} session=${sessionId} state=${work.state}`,
+    );
+
+    const created = await this.ensureDispatch({
+      sessionId,
+      workId: work.id,
+      environmentId: this.config.ENVIRONMENT_ID,
+      baseURL: resolveAnthropicBaseURL(this.config.ANTHROPIC_BASE_URL),
+    });
+
+    return { session_id: sessionId, work_id: work.id, created };
   }
 
   async ensureDispatch(opts: DispatchOpts): Promise<boolean> {
@@ -169,6 +224,14 @@ export class SessionCoordinator {
     }
     const snapshotName = `cma-${sessionId.slice(0, 32)}`;
     try {
+      if (row.snapshot_name) {
+        try {
+          await this.islo.deleteSnapshot(row.snapshot_name);
+          console.log(`[snapshot] deleted old snapshot=${row.snapshot_name} session=${sessionId}`);
+        } catch {
+          // ignore — might not exist anymore
+        }
+      }
       const snapshot = await this.islo.createSnapshot(row.sandbox_id, snapshotName);
       this.store.setSnapshot(sessionId, snapshot.name);
       console.log(

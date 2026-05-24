@@ -1,6 +1,13 @@
+import { loadEnvFile } from "node:process";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+
+try {
+  loadEnvFile();
+} catch {
+  // .env is optional when vars are injected (e.g. Docker Compose env_file)
+}
 import { SessionCoordinator } from "./sessions/coordinator.js";
 import { SessionStore } from "./storage/db.js";
 

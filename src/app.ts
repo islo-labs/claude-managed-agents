@@ -12,6 +12,11 @@ export function createApp(
 ): Hono {
   const app = new Hono();
 
+  app.use("*", async (c, next) => {
+    await next();
+    console.log(`[http] ${c.req.method} ${c.req.path} ${c.res.status}`);
+  });
+
   app.get("/health", (c) =>
     c.json({
       status: "ok",
@@ -23,6 +28,16 @@ export function createApp(
   app.get("/sessions", (c) => c.json({ items: store.listSessions() }));
 
   app.post("/webhooks", (c) => handleWebhook(c, config, store, coordinator));
+
+  app.post("/", (c) =>
+    c.json(
+      {
+        error: "webhook endpoint is POST /webhooks",
+        hint: "Update your Anthropic webhook URL to include /webhooks",
+      },
+      404,
+    ),
+  );
 
   app.get("/", (c) =>
     c.json({

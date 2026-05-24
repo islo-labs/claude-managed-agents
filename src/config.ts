@@ -9,7 +9,7 @@ const configSchema = z.object({
   ISLO_API_KEY: z.string().min(1),
   ISLO_API_BASE_URL: z.string().url(),
   ISLO_GATEWAY_PROFILE: z.string().optional(),
-  ISLO_RUNNER_IMAGE: z.string().default("ghcr.io/islo-labs/islo-runner-cma:latest"),
+  ISLO_RUNNER_IMAGE: z.string().default("ghcr.io/islo-labs/islo-runner:latest"),
   ISLO_SANDBOX_CPUS: z.coerce.number().int().positive().default(2),
   ISLO_SANDBOX_MEMORY_MB: z.coerce.number().int().positive().default(4096),
   ISLO_SANDBOX_DISK_GB: z.coerce.number().int().positive().default(20),

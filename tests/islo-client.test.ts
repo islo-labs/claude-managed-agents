@@ -11,7 +11,7 @@ describe("IsloClient", () => {
       WEBHOOK_SECRET: "secret",
       ISLO_API_KEY: "islo",
       ISLO_API_BASE_URL: "https://api.islo.dev",
-      ISLO_RUNNER_IMAGE: "ghcr.io/islo-labs/islo-runner-cma:latest",
+      ISLO_RUNNER_IMAGE: "ghcr.io/islo-labs/islo-runner:latest",
       ISLO_SANDBOX_CPUS: 2,
       ISLO_SANDBOX_MEMORY_MB: 4096,
       ISLO_SANDBOX_DISK_GB: 20,

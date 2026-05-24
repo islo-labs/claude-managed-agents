@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { BetaManagedAgentsEventParams } from "@anthropic-ai/sdk/resources/beta/sessions/events";
 import { asManagedAgentsClient } from "../anthropic-client.js";
 import { ANTHROPIC_BETA } from "../anthropic.js";
 import type { RunnableTool } from "./stock-tools.js";
@@ -160,6 +161,12 @@ async function execute(ctx: Ctx, ev: ToolUseEvent): Promise<void> {
   } else {
     ({ content, isError } = await runTool(ctx, tool, ev));
   }
+  const preview = typeof content === "string"
+    ? content.slice(0, 120).replace(/\n/g, "↵")
+    : JSON.stringify(content).slice(0, 120);
+  console.log(
+    `[dispatch] result kind=${kind} tool=${ev.name} session=${ctx.sessionId} use_id=${ev.id} isError=${isError} preview=${JSON.stringify(preview)}`,
+  );
   await postResult(ctx, ev, content, isError);
 }
 
@@ -213,7 +220,7 @@ async function postResult(
       const managed = asManagedAgentsClient(ctx.client);
       await managed.beta.sessions.events.send(
         ctx.sessionId,
-        { betas: [ANTHROPIC_BETA], events: [resultEvent] },
+        { betas: [ANTHROPIC_BETA], events: [resultEvent as BetaManagedAgentsEventParams] },
         { signal: ctx.signal },
       );
       ctx.answered.add(ev.id);

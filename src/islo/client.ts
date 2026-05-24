@@ -1,3 +1,4 @@
+import { Islo } from "@islo-labs/sdk";
 import type { Config } from "../config.js";
 
 export interface SandboxResponse {
@@ -29,35 +30,13 @@ export interface IsloSandboxHandle {
 }
 
 export class IsloClient {
-  constructor(private readonly config: Config) {}
+  private readonly sdk: Islo;
 
-  private base(): string {
-    return this.config.ISLO_API_BASE_URL.replace(/\/$/, "");
-  }
-
-  private headers(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.config.ISLO_API_KEY}`,
-      "Content-Type": "application/json",
-    };
-  }
-
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
-    const res = await fetch(`${this.base()}${path}`, {
-      method,
-      headers: this.headers(),
-      body: body === undefined ? undefined : JSON.stringify(body),
+  constructor(private readonly config: Config) {
+    this.sdk = new Islo({
+      apiKey: config.ISLO_API_KEY,
+      baseUrl: config.ISLO_API_BASE_URL,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Islo API ${method} ${path} failed (${res.status}): ${text}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
   }
 
   sandboxNameForSession(sessionId: string): string {
@@ -71,26 +50,21 @@ export class IsloClient {
     snapshotName?: string;
   }): Promise<IsloSandboxHandle> {
     const name = this.sandboxNameForSession(opts.sessionId);
-    const body: Record<string, unknown> = {
+    const sandbox = await this.sdk.sandboxes.createSandbox({
       name,
       image: this.config.ISLO_RUNNER_IMAGE,
       vcpus: this.config.ISLO_SANDBOX_CPUS,
       memory_mb: this.config.ISLO_SANDBOX_MEMORY_MB,
       disk_gb: this.config.ISLO_SANDBOX_DISK_GB,
       env: opts.env,
-    };
-    if (this.config.ISLO_GATEWAY_PROFILE) {
-      body.gateway_profile = this.config.ISLO_GATEWAY_PROFILE;
-    }
-    if (opts.snapshotName) {
-      body.snapshot_name = opts.snapshotName;
-    }
-    const sandbox = await this.request<SandboxResponse>("POST", "/sandboxes", body);
-    return { name: sandbox.name, id: String(sandbox.id) };
+      gateway_profile: this.config.ISLO_GATEWAY_PROFILE ?? null,
+      snapshot_name: opts.snapshotName ?? null,
+    });
+    return { name: sandbox.name, id: sandbox.id };
   }
 
   async deleteSandbox(name: string): Promise<void> {
-    await this.request("DELETE", `/sandboxes/${encodeURIComponent(name)}`);
+    await this.sdk.sandboxes.deleteSandbox({ sandbox_name: name });
   }
 
   async exec(
@@ -98,15 +72,14 @@ export class IsloClient {
     command: string[],
     opts?: { workdir?: string; timeoutSecs?: number },
   ): Promise<ExecResultResponse> {
-    const started = await this.request<{ exec_id: string }>(
-      "POST",
-      `/sandboxes/${encodeURIComponent(sandboxName)}/exec`,
-      {
+    const started = await this.sdk.sandboxes.execInSandbox({
+      sandbox_name: sandboxName,
+      body: {
         command,
         workdir: opts?.workdir ?? "/workspace",
         timeout_secs: opts?.timeoutSecs,
       },
-    );
+    });
     return this.pollExec(sandboxName, started.exec_id, opts?.timeoutSecs ?? 120);
   }
 
@@ -117,12 +90,16 @@ export class IsloClient {
   ): Promise<ExecResultResponse> {
     const deadline = Date.now() + timeoutSecs * 1000;
     while (Date.now() < deadline) {
-      const result = await this.request<ExecResultResponse>(
-        "GET",
-        `/sandboxes/${encodeURIComponent(sandboxName)}/exec/${encodeURIComponent(execId)}`,
-      );
-      if (result.status === "completed" || result.status === "failed" || result.status === "timeout") {
-        return result;
+      const result = await this.sdk.sandboxes.getExecResult({
+        sandbox_name: sandboxName,
+        exec_id: execId,
+      });
+      if (
+        result.status === "completed" ||
+        result.status === "failed" ||
+        result.status === "timeout"
+      ) {
+        return result as ExecResultResponse;
       }
       await sleep(250);
     }
@@ -130,32 +107,23 @@ export class IsloClient {
   }
 
   async readFile(sandboxName: string, filePath: string): Promise<string> {
-    const res = await fetch(
-      `${this.base()}/sandboxes/${encodeURIComponent(sandboxName)}/files?${new URLSearchParams({ path: filePath })}`,
-      { headers: { Authorization: `Bearer ${this.config.ISLO_API_KEY}` } },
-    );
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`readFile ${filePath} failed (${res.status}): ${text}`);
+    const result = await this.exec(sandboxName, ["cat", filePath], { timeoutSecs: 30 });
+    if (result.exit_code !== 0) {
+      throw new Error(`readFile ${filePath} failed (exit ${result.exit_code}): ${result.stderr}`);
     }
-    return res.text();
+    return result.stdout;
   }
 
   async writeFile(sandboxName: string, filePath: string, content: string): Promise<void> {
-    const res = await fetch(
-      `${this.base()}/sandboxes/${encodeURIComponent(sandboxName)}/files?${new URLSearchParams({ path: filePath })}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.ISLO_API_KEY}`,
-          "Content-Type": "application/octet-stream",
-        },
-        body: content,
-      },
+    const b64 = Buffer.from(content, "utf8").toString("base64");
+    const dir = filePath.includes("/") ? filePath.replace(/\/[^/]+$/, "") : ".";
+    const result = await this.exec(
+      sandboxName,
+      ["sh", "-c", `mkdir -p ${dir} && printf %s ${b64} | base64 -d > ${filePath}`],
+      { timeoutSecs: 30 },
     );
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`writeFile ${filePath} failed (${res.status}): ${text}`);
+    if (result.exit_code !== 0) {
+      throw new Error(`writeFile ${filePath} failed (exit ${result.exit_code}): ${result.stderr}`);
     }
   }
 
@@ -164,21 +132,36 @@ export class IsloClient {
   }
 
   async createSnapshot(sandboxId: string, name?: string): Promise<SnapshotResponse> {
-    return this.request<SnapshotResponse>("POST", "/snapshots", {
+    const snap = await this.sdk.snapshots.createSnapshot({
       sandbox_id: sandboxId,
       name,
     });
+    return {
+      id: snap.id,
+      name: snap.name,
+      status: snap.status,
+      sandbox_id: snap.sandbox_id ?? null,
+    };
+  }
+
+  async deleteSnapshot(name: string): Promise<void> {
+    await this.sdk.snapshots.deleteSnapshot({ name });
   }
 
   async getSandboxByName(name: string): Promise<SandboxResponse | null> {
     try {
-      return await this.request<SandboxResponse>(
-        "GET",
-        `/sandboxes/${encodeURIComponent(name)}`,
-      );
+      const sb = await this.sdk.sandboxes.getSandbox({ sandbox_name: name });
+      return {
+        id: sb.id,
+        name: sb.name,
+        status: sb.status,
+        image: sb.image ?? "",
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("404")) return null;
+      if (msg.includes("404") || msg.includes("not found") || msg.includes("Not Found")) {
+        return null;
+      }
       throw err;
     }
   }
